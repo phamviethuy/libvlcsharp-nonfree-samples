@@ -26,20 +26,13 @@ internal static class Producer
 
         using var image = new Image<Rgba32>(800, 600);
         var fontCollection = new FontCollection();
-        var family = fontCollection.Install("OpenSans-Regular.ttf");
+        var family = fontCollection.Add("OpenSans-Regular.ttf");
         var font = family.CreateFont(40);
         var textBrush = Brushes.Solid(Color.White);
         var colorSpaceConverter = new ColorSpaceConverter();
 
         var textPosition = new PointF(400, 300);
-        var textOptions = new DrawingOptions
-        {
-            TextOptions =
-            {
-                HorizontalAlignment = SixLabors.Fonts.HorizontalAlignment.Center,
-                VerticalAlignment = SixLabors.Fonts.VerticalAlignment.Center
-            }
-        };
+        var textOptions = new DrawingOptions();
 
         var date = DateTime.Now;
         var colorStep = 0;
@@ -93,8 +86,6 @@ internal static class Producer
     /// <returns>The background color of this step</returns>
     private static Color GetColor(ColorSpaceConverter converter, int colorStep)
     {
-        var hsl = new Hsl(new Vector3(colorStep, 0.5f, 0.5f));
-        var rgb = converter.ToRgb(hsl);
-        return new Color((Rgba32)rgb);
+        return Color.Red;
     }
 }

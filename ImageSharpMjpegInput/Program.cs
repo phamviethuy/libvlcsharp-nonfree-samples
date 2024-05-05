@@ -15,9 +15,11 @@ using var mediaInput = new PipeMediaInput(pipe.Reader);
 using var media = new Media(libVLC, mediaInput);
 using var mp = new MediaPlayer(media);
 
+libVLC.CloseLogFile();
+
 var form = new Form();
 
-form.ClientSize = new Size(800, 600);
+form.ClientSize = new Size(1280, 720);
 
 form.Load += (s, e) =>
 {
@@ -29,7 +31,13 @@ form.Show();
 
 var cancellationTokenSource = new CancellationTokenSource();
 
-var producerTask = Task.Run(() => Producer.Run(pipe.Writer, cancellationTokenSource.Token));
+var producerTask = Task.Run(() =>
+{
+
+    //new ProducerFlashCap(pipe.Writer, cancellationTokenSource.Token);
+    ProducerCV.Run(pipe.Writer, cancellationTokenSource.Token);
+
+});
 
 form.FormClosing += (s, e) =>
 {

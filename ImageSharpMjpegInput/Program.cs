@@ -9,13 +9,11 @@ using ImageSharpMjpegInput;
 
 Core.Initialize();
 
-using var libVLC = new LibVLC("--demux=mjpeg");
+using var libVLC = new LibVLC("--demux=mpjeg");
 var pipe = new Pipe();
 using var mediaInput = new PipeMediaInput(pipe.Reader);
 using var media = new Media(libVLC, mediaInput);
 using var mp = new MediaPlayer(media);
-
-libVLC.CloseLogFile();
 
 var form = new Form();
 
@@ -34,8 +32,9 @@ var cancellationTokenSource = new CancellationTokenSource();
 var producerTask = Task.Run(() =>
 {
 
+    new ProducerPylon(pipe.Writer, cancellationTokenSource.Token);
     //new ProducerFlashCap(pipe.Writer, cancellationTokenSource.Token);
-    ProducerCV.Run(pipe.Writer, cancellationTokenSource.Token);
+    // ProducerCV.Run(pipe.Writer, cancellationTokenSource.Token);
 
 });
 

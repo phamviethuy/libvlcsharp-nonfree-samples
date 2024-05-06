@@ -3,50 +3,65 @@
 // After payment, the file is considered yours and no copyright notice is required (though it would be appreciated).
 // The file is provided as-is without any guarantee or support, and you still need to comply to the licenses of the dependencies of this file.
 
-using FlashCap;
-using SixLabors.ImageSharp.Drawing;
+using Basler.Pylon;
+using Emgu.CV.CvEnum;
+using Emgu.CV.Structure;
+using Emgu.CV;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Drawing.Imaging;
 using System.IO.Pipelines;
+using BitMiracle.LibJpeg;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 
 namespace ImageSharpMjpegInput;
 
-internal class ProducerFlashCap
+internal class ProducerPylon
 {
-    private readonly PipeWriter _writer;
-    private readonly CancellationToken _token;
     private readonly MemoryStream _jpegOutputMemoryStream;
+    private readonly CancellationToken _token;
+    private readonly PipeWriter _writer;
     private readonly ConcurrentQueue<byte[]> frames = new();
 
-    public ProducerFlashCap(PipeWriter writer, CancellationToken token)
+    public ProducerPylon(PipeWriter writer, CancellationToken token)
     {
         _writer = writer;
         _token = token;
         _jpegOutputMemoryStream = new MemoryStream();
-        InitFlasCapAsync();
+        InitCam();
         Consumer();
     }
 
-    private async Task InitFlasCapAsync()
+    private static byte[] EncodeBgrToJpeg(byte[] bgrData, int width, int height)
     {
-        var devices = new CaptureDevices();
-
-        var devicesDes = new List<CaptureDeviceDescriptor>();
-
-        foreach (var descriptor in devices.EnumerateDescriptors().
-            Where(d => d.Characteristics.Length >= 1))             // One or more valid video characteristics.
+        // Create a MemoryStream to hold the JPEG bytes
+        using MemoryStream memoryStream = new();
+        // Initialize JPEG compressor
+        using (JpegImage jpegImage = new(GetSampleRows(bgrData, width, height), Colorspace.RGB)) // Provide sample data and specify colorspace
         {
-            devicesDes.Add(descriptor);
+            // Encode to JPEG
+            jpegImage.WriteJpeg(memoryStream);
         }
 
-        var device = devicesDes[1];
-        var characteristics = device.Characteristics[3];
+        // Return the JPEG bytes
+        return memoryStream.ToArray();
+    }
 
-        // Open capture device:
-        var captureDevice = await device.OpenAsync(characteristics, OnPixelBufferArrivedAsync);
 
-        captureDevice?.StartAsync();
+    // Helper function to create sample rows from BGR data
+    static SampleRow[] GetSampleRows(byte[] bgrData, int width, int height)
+    {
+        SampleRow[] sampleRows = new SampleRow[height];
+        int rowSize = width * 3; // 3 components (BGR)
+
+        for (int y = 0; y < height; y++)
+        {
+            byte[] rowData = new byte[rowSize];
+            Array.Copy(bgrData, y * rowSize, rowData, 0, rowSize);
+            sampleRows[y] = new SampleRow(rowData, width, 8, 3); // 8 bits per component, 3 components per sample (BGR)
+        }
+
+        return sampleRows;
     }
 
     private async Task AddImageBufferAsync(byte[] jpegData)
@@ -66,13 +81,6 @@ internal class ProducerFlashCap
         {
             Debug.WriteLine("Stop writer");
         }
-    }
-
-    private void OnPixelBufferArrivedAsync(PixelBufferScope bufferScope)
-    {
-        var bytes = bufferScope.Buffer.CopyImage();
-        frames.Enqueue(bytes);
-
     }
 
     private void Consumer()
@@ -98,11 +106,34 @@ internal class ProducerFlashCap
                     Thread.Sleep(10);
                     continue;
                 }
-
+                var jpegData = EncodeBgrToJpeg(data, 1024, 1040);
                 await AddImageBufferAsync(data);
                 Thread.Sleep(5);
             }
         });
+    }
 
+    private void InitCam()
+    {
+        Task.Factory.StartNew(() =>
+        {
+            var camera = new Camera();
+            camera.CameraOpened += Configuration.AcquireContinuous;
+            camera.Open();
+            camera.Parameters[PLCamera.PixelFormat].SetValue("BGR8Packed");
+            camera.StreamGrabber.Start();
+
+            while (true)
+            {
+                using var grabResult = camera.StreamGrabber.RetrieveResult(100, TimeoutHandling.Return);
+                if (grabResult == null || !grabResult.IsValid)
+                {
+                    Thread.Sleep(5);
+                    continue;
+                }
+                frames.Enqueue(grabResult.PixelData as byte[]);
+                Thread.Sleep(5);
+            }
+        });
     }
 }

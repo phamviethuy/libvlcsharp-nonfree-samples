@@ -13,7 +13,7 @@ internal static class ProducerCV
 {
     public static async Task Run(PipeWriter writer, CancellationToken token)
     {
-        VideoCapture videoCapture = new(0);
+        VideoCapture videoCapture = new(1);
         videoCapture.Set(Emgu.CV.CvEnum.CapProp.FrameWidth, 1920);
         videoCapture.Set(Emgu.CV.CvEnum.CapProp.FrameHeight, 1080);
         videoCapture.Start();
@@ -27,8 +27,9 @@ internal static class ProducerCV
                 Thread.Sleep(10);
                 continue;
             }
-            var jpegData = mat.ToJpegData(100);
-            jpegOutputMemoryStream.Write(jpegData, 0, jpegData.Length);
+            //var jpegData = mat.ToJpegData();
+            var bytes = mat.Bytes;
+            jpegOutputMemoryStream.Write(bytes, 0, bytes.Length);
             var length = jpegOutputMemoryStream.Position;
             var memory = writer.GetMemory((int)length);
             jpegOutputMemoryStream.Position = 0;

@@ -4,6 +4,7 @@
 // The file is provided as-is without any guarantee or support, and you still need to comply to the licenses of the dependencies of this file.
 
 using Basler.Pylon;
+
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipelines;
@@ -53,19 +54,19 @@ internal class ProducerPylon
             {
                 if (frames.IsEmpty)
                 {
-                    Thread.Sleep(10);
+                    Thread.Sleep(5);
                     continue;
                 }
 
                 var isFrame = frames.TryDequeue(out var data);
                 if (!isFrame)
                 {
-                    Thread.Sleep(10);
+                    Thread.Sleep(5);
                     continue;
                 }
                 if (data == null)
                 {
-                    Thread.Sleep(10);
+                    Thread.Sleep(5);
                     continue;
                 }
                 await AddImageBufferAsync(data);
@@ -84,11 +85,13 @@ internal class ProducerPylon
             camera.Parameters[PLCamera.PixelFormat].SetValue("BGR8Packed");
             camera.Parameters[PLCamera.Width].SetValue(1920);
             camera.Parameters[PLCamera.Height].SetValue(1080);
+            camera.Parameters[PLCamera.AcquisitionFrameRateEnable].SetValue(true);
+            camera.Parameters[PLCamera.AcquisitionFrameRate].SetValue(90);
             camera.StreamGrabber.Start();
 
             while (true)
             {
-                using var grabResult = camera.StreamGrabber.RetrieveResult(100, TimeoutHandling.Return);
+                using var grabResult = camera.StreamGrabber.RetrieveResult(1000, TimeoutHandling.Return);
                 if (grabResult == null || !grabResult.IsValid)
                 {
                     Thread.Sleep(5);

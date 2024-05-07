@@ -3,26 +3,27 @@
 // After payment, the file is considered yours and no copyright notice is required (though it would be appreciated).
 // The file is provided as-is without any guarantee or support, and you still need to comply to the licenses of the dependencies of this file.
 
-using Basler.Pylon;
+using Emgu.CV;
+using Emgu.CV.Structure;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipelines;
 
 namespace ImageSharpMjpegInput;
 
-internal class ProducerPylon
+internal class ProducerCV
 {
     private readonly MemoryStream _jpegOutputMemoryStream;
     private readonly CancellationToken _token;
     private readonly PipeWriter _writer;
-    private readonly ConcurrentQueue<byte[]> frames = new();
+    private readonly ConcurrentQueue<Image<Bgr, byte>> frames = new();
 
-    public ProducerPylon(PipeWriter writer, CancellationToken token)
+    public ProducerCV(PipeWriter writer, CancellationToken token)
     {
         _writer = writer;
         _token = token;
         _jpegOutputMemoryStream = new MemoryStream();
-        InitCam();
+        Task.Factory.StartNew(InitCam);
         Consumer();
     }
 
@@ -68,7 +69,8 @@ internal class ProducerPylon
                     Thread.Sleep(10);
                     continue;
                 }
-                await AddImageBufferAsync(data);
+                await AddImageBufferAsync(data.Bytes);
+                data.Dispose();
                 Thread.Sleep(5);
             }
         });
@@ -76,27 +78,22 @@ internal class ProducerPylon
 
     private void InitCam()
     {
-        Task.Factory.StartNew(() =>
+        VideoCapture videoCapture = new(0);
+        videoCapture.Set(Emgu.CV.CvEnum.CapProp.FrameWidth, 1920);
+        videoCapture.Set(Emgu.CV.CvEnum.CapProp.FrameHeight, 1080);
+        videoCapture.Start();
+        while (!_token.IsCancellationRequested)
         {
-            var camera = new Camera();
-            camera.CameraOpened += Configuration.AcquireContinuous;
-            camera.Open();
-            camera.Parameters[PLCamera.PixelFormat].SetValue("BGR8Packed");
-            camera.Parameters[PLCamera.Width].SetValue(1920);
-            camera.Parameters[PLCamera.Height].SetValue(1080);
-            camera.StreamGrabber.Start();
-
-            while (true)
+            var mat = new Image<Bgr, byte>(1920, 1080);
+            var isOk = videoCapture.Read(mat);
+            if (!isOk)
             {
-                using var grabResult = camera.StreamGrabber.RetrieveResult(100, TimeoutHandling.Return);
-                if (grabResult == null || !grabResult.IsValid)
-                {
-                    Thread.Sleep(5);
-                    continue;
-                }
-                frames.Enqueue(grabResult.PixelData as byte[]);
-                Thread.Sleep(5);
+                Thread.Sleep(10);
+                continue;
             }
-        });
+            frames.Enqueue(mat);
+
+            Thread.Sleep(10);
+        }
     }
 }

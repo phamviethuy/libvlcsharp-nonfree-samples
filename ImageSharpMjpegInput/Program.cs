@@ -11,14 +11,15 @@ Core.Initialize();
 
 using var libVLC = new LibVLC();
 var pipe = new Pipe();
+//using var mediaInput = new PipeMediaInput(pipe.Reader);
 using var mediaInput = new MyMediaInput();
 using var media = new Media(libVLC, mediaInput);
 
 // Set video parameters
 media.AddOption(":demux=rawvideo");
-media.AddOption(":rawvid-width=" + 1024);
-media.AddOption(":rawvid-height=" + 1040);
-media.AddOption(":rawvid-format=RGB");
+media.AddOption(":rawvid-width=" + 1920);
+media.AddOption(":rawvid-height=" + 1080);
+media.AddOption(":rawvid-format=BGR");
 media.AddOption(":rawvid-fps=" + 30);
 media.AddOption(":rawvid-chroma=" + "RV24");
 
@@ -38,13 +39,6 @@ form.Load += (s, e) =>
 form.Show();
 
 var cancellationTokenSource = new CancellationTokenSource();
-
-//var producerTask = Task.Run(() =>
-//{
-//    new ProducerPylon(pipe.Writer, cancellationTokenSource.Token);
-//    //new ProducerFlashCap(pipe.Writer, cancellationTokenSource.Token);
-//    // ProducerCV.Run(pipe.Writer, cancellationTokenSource.Token);
-//});
 
 form.FormClosing += (s, e) =>
 {

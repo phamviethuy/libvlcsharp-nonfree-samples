@@ -1,6 +1,5 @@
 ﻿using Basler.Pylon;
 using LibVLCSharp.Shared;
-using System;
 using System.Collections.Concurrent;
 
 namespace ImageSharpMjpegInput
@@ -8,7 +7,8 @@ namespace ImageSharpMjpegInput
     internal class MyMediaInput : MediaInput
     {
         private readonly Camera camera = new();
-        private readonly ConcurrentQueue<IntPtr> frames = new();
+        private readonly ConcurrentQueue<byte[]> frames = new();
+        private byte[]? currentFrame;
         private readonly ManualResetEvent ManualResetEvent = new(false);
 
         public MyMediaInput()
@@ -34,7 +34,7 @@ namespace ImageSharpMjpegInput
                         Thread.Sleep(1);
                         continue;
                     }
-                    frames.Enqueue(grabResult.PixelDataPointer);
+                    frames.Enqueue(grabResult.PixelData as byte[]);
                     ManualResetEvent.Set();
                     Thread.Sleep(1);
                 }
@@ -53,23 +53,42 @@ namespace ImageSharpMjpegInput
             return true;
         }
 
-        public unsafe override int Read(IntPtr buf, uint len)
+        public override int Read(IntPtr buf, uint len)
         {
             ManualResetEvent.WaitOne();
-            var isOk = frames.TryDequeue(out var intPt);
+            if (currentFrame != null)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(currentFrame, 0, buf, currentFrame.Length);
+                ManualResetEvent.Reset();
+                var length = currentFrame.Length;
+                currentFrame = null;
+                return length;
+            }
+
+            var isOk = frames.TryDequeue(out var capturedFrame);
             if (!isOk)
             {
-                return (int)(len);
+                return -1;
             }
-            var capturedFrame = new Span<byte>(intPt.ToPointer(), (int)len);
-            var buffer = (capturedFrame.Length > len) ? capturedFrame[..(int)len] : capturedFrame;
-            var outputBuffer = new Span<byte>(buf.ToPointer(), (int)len);
 
+            if (capturedFrame == null)
+            {
+                return -1;
+            }
+
+            if (capturedFrame.Length > len)
+            {
+                int remainLenght = capturedFrame.Length - (int)len;
+                currentFrame = new byte[remainLenght];
+
+                System.Runtime.InteropServices.Marshal.Copy(capturedFrame, 0, buf, (int)len);
+                Array.Copy(capturedFrame, (int)len, currentFrame, 0, remainLenght);
+                return capturedFrame.Length;
+            }
             // Copy captured frame to buffer
             if (capturedFrame.Length <= len)
             {
                 System.Runtime.InteropServices.Marshal.Copy(capturedFrame, 0, buf, capturedFrame.Length);
-                ManualResetEvent.Reset();
                 return capturedFrame.Length;
             }
 
@@ -80,6 +99,5 @@ namespace ImageSharpMjpegInput
         {
             return false;
         }
-
     }
 }
